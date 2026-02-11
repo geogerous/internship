@@ -757,8 +757,10 @@ void VolumeRender::MallocMemory() {
     for (int i = 0; i < 9; i++) {
         int reso = 256 >> i;
         mips[i] = new float[reso * reso * reso];
+        var_mips[i] = new float[reso * reso * reso];
         mip_size[i] = cudaExtent{ (size_t)reso, (size_t)reso, (size_t)reso };
         cudaMalloc3DArray(mips_dev + i, &channel_desc, mip_size[i]);
+        cudaMalloc3DArray(var_mips_dev + i, &channel_desc, mip_size[i]);
     }
     for (int i = 0; i < 8; i++) {
         int reso = 128 >> i;
@@ -768,6 +770,60 @@ void VolumeRender::MallocMemory() {
     }
 
     cudaMallocArray(&hglut_dev, &channel_desc, LUT_SIZE, LUT_SIZE, cudaArraySurfaceLoadStore);
+}
+
+void VolumeRender::GenerateVarianceMipmaps() {
+    // 在基础层设置方差为 0（因为没有降采样的信息丢失）
+    int base_res = 256;
+    for (int i = 0; i < base_res * base_res * base_res; i++) {
+        var_mips[0][i] = 0.0f;
+    }
+
+    // 从第 0 级开始逐级生成方差 mipmap
+    for (int mip = 0; mip < 8; mip++) {
+        int cur_res = 256 >> mip;
+        int next_res = 256 >> (mip + 1);
+
+        float* src_density = mips[mip];
+        float* dst_density = mips[mip + 1];
+        float* dst_variance = var_mips[mip + 1];
+
+        // 遍历下一级的每个体素
+        for (int z = 0; z < next_res; ++z) {
+            for (int y = 0; y < next_res; ++y) {
+                for (int x = 0; x < next_res; ++x) {
+                    float sum = 0.0f;
+                    float sum_sq = 0.0f;
+
+                    // 遍历当前级的 2x2x2 邻域
+                    for (int kz = 0; kz < 2; ++kz) {
+                        for (int ky = 0; ky < 2; ++ky) {
+                            for (int kx = 0; kx < 2; ++kx) {
+                                int src_x = x * 2 + kx;
+                                int src_y = y * 2 + ky;
+                                int src_z = z * 2 + kz;
+                                
+                                if (src_x < cur_res && src_y < cur_res && src_z < cur_res) {
+                                    int src_idx = (src_z * cur_res + src_y) * cur_res + src_x;
+                                    float val = src_density[src_idx];
+                                    sum += val;
+                                    sum_sq += val * val;
+                                }
+                            }
+                        }
+                    }
+
+                    float mean = sum / 8.0f;
+                    // 计算方差: E[X^2] - (E[X])^2
+                    float variance = (sum_sq / 8.0f) - (mean * mean);
+                    variance = max(0.0f, variance);
+
+                    int dst_idx = (z * next_res + y) * next_res + x;
+                    dst_variance[dst_idx] = variance;
+                }
+            }
+        }
+    }
 }
 
 //InitWeight weight;
@@ -861,7 +917,9 @@ VolumeRender::~VolumeRender() {
     delete[]hglut;
     for (int i = 0; i < 9; i++) {
         delete[] mips[i];
+        delete[] var_mips[i];
         cudaFreeArray(mips_dev[i]);
+        cudaFreeArray(var_mips_dev[i]);
     }
     for (int i = 0; i < 8; i++) {
         delete[] tr_mips[i];
@@ -1206,6 +1264,20 @@ void VolumeRender::Update() {
 
         CheckError;
     }
+
+    GenerateVarianceMipmaps();
+    
+    for (int mip = 0; mip < 9; mip++) {
+        int res_var = 256 >> mip;
+        cudaMemcpy3DParms copyParams = { 0 };
+        copyParams.srcPtr = make_cudaPitchedPtr((void*)var_mips[mip], res_var * sizeof(float), res_var, res_var);
+        copyParams.dstArray = var_mips_dev[mip];
+        copyParams.extent = make_cudaExtent(res_var, res_var, res_var);
+        copyParams.kind = cudaMemcpyHostToDevice;
+        cudaMemcpy3D(&copyParams);
+        CheckError;
+    }
+
     #define BindMip(i)  Mip(i).normalized = true;\
                         Mip(i).filterMode = cudaFilterModeLinear;\
                         Mip(i).addressMode[0] = cudaAddressModeBorder;\
@@ -1218,6 +1290,19 @@ void VolumeRender::Update() {
     BindMip(6); BindMip(7); BindMip(8);
 
     #undef BindMip
+
+    #define BindVarMip(i)  VarMip(i).normalized = true;\
+                           VarMip(i).filterMode = cudaFilterModeLinear;\
+                           VarMip(i).addressMode[0] = cudaAddressModeBorder;\
+                           VarMip(i).addressMode[1] = cudaAddressModeBorder;\
+                           VarMip(i).addressMode[2] = cudaAddressModeBorder;\
+                           cudaBindTextureToArray(VarMip(i), var_mips_dev[i], channel_desc);
+
+    BindVarMip(0); BindVarMip(1); BindVarMip(2);
+    BindVarMip(3); BindVarMip(4); BindVarMip(5);
+    BindVarMip(6); BindVarMip(7); BindVarMip(8);
+
+    #undef BindVarMip
 
     CheckError;
 }

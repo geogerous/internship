@@ -19,6 +19,40 @@ __device__ float IOR = -1;
 typedef float3(*SkyBoxFunc)(float3);
 typedef float(*DensityFunc)(float3);
 
+// [新增] 方差纹理宏定义（类似 Mip 宏）
+#define VarMip(i) _VarDensityMip##i
+
+// [新增] 声明方差 Mipmap 纹理
+texture<float, cudaTextureType3D, cudaReadModeElementType>  VarMip(0);
+texture<float, cudaTextureType3D, cudaReadModeElementType>  VarMip(1);
+texture<float, cudaTextureType3D, cudaReadModeElementType>  VarMip(2);
+texture<float, cudaTextureType3D, cudaReadModeElementType>  VarMip(3);
+texture<float, cudaTextureType3D, cudaReadModeElementType>  VarMip(4);
+texture<float, cudaTextureType3D, cudaReadModeElementType>  VarMip(5);
+texture<float, cudaTextureType3D, cudaReadModeElementType>  VarMip(6);
+texture<float, cudaTextureType3D, cudaReadModeElementType>  VarMip(7);
+texture<float, cudaTextureType3D, cudaReadModeElementType>  VarMip(8);
+
+// [新增] 方差采样函数
+__device__ inline float VarMipDensityDynamic(int mip, float3 pos) {
+    if (mip < 0) mip = 0;
+    if (mip > 8) mip = 8;
+    
+    float3 uv = pos + 0.5;
+    
+    switch (mip) {
+        case 0: return tex3D<float>(VarMip(0), uv.z, uv.y, uv.x);
+        case 1: return tex3D<float>(VarMip(1), uv.z, uv.y, uv.x);
+        case 2: return tex3D<float>(VarMip(2), uv.z, uv.y, uv.x);
+        case 3: return tex3D<float>(VarMip(3), uv.z, uv.y, uv.x);
+        case 4: return tex3D<float>(VarMip(4), uv.z, uv.y, uv.x);
+        case 5: return tex3D<float>(VarMip(5), uv.z, uv.y, uv.x);
+        case 6: return tex3D<float>(VarMip(6), uv.z, uv.y, uv.x);
+        case 7: return tex3D<float>(VarMip(7), uv.z, uv.y, uv.x);
+        case 8: return tex3D<float>(VarMip(8), uv.z, uv.y, uv.x);
+        default: return 0.0f;
+    }
+}
 
 __device__ float3 SkyBox(float3 dir) {
     float4 pix = tex2D<float4>(_HDRI, atan2f(-dir.z, dir.x) * (float)(0.5 / 3.1415926) + 0.5f, acosf(fmaxf(fminf(dir.y, 1.0f), -1.0f)) * (float)(1.0 / 3.1415926));

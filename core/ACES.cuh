@@ -38,17 +38,31 @@ texture<float, cudaTextureType3D, cudaReadModeElementType> _TR_Mips5;
 texture<float, cudaTextureType3D, cudaReadModeElementType> _TR_Mips6;
 texture<float, cudaTextureType3D, cudaReadModeElementType> _TR_Mips7;
 
+#define Var_Mip(i) _Var_Mips##i
+texture<float, cudaTextureType3D, cudaReadModeElementType> _Var_Mips0;
+texture<float, cudaTextureType3D, cudaReadModeElementType> _Var_Mips1;
+texture<float, cudaTextureType3D, cudaReadModeElementType> _Var_Mips2;
+texture<float, cudaTextureType3D, cudaReadModeElementType> _Var_Mips3;
+texture<float, cudaTextureType3D, cudaReadModeElementType> _Var_Mips4;
+texture<float, cudaTextureType3D, cudaReadModeElementType> _Var_Mips5;
+texture<float, cudaTextureType3D, cudaReadModeElementType> _Var_Mips6;
+texture<float, cudaTextureType3D, cudaReadModeElementType> _Var_Mips7;
+texture<float, cudaTextureType3D, cudaReadModeElementType> _Var_Mips8;
+
 texture<float4, cudaTextureType2D> _HDRI;
 
 #define MipDensityStatic(mip, pos) tex3D<float>(Mip(mip), (pos).z + 0.5, (pos).y + 0.5, (pos).x + 0.5)
 #define MipTrStatic(mip, pos) tex3D<float>(TR_Mip(mip), (pos).z + 0.5, (pos).y + 0.5, (pos).x + 0.5)
+#define MipVarianceStatic(mip, pos) tex3D<float>(Var_Mip(mip), (pos).z + 0.5, (pos).y + 0.5, (pos).x + 0.5)
 
 __device__ float MipDensityDynamic(int mip, float3 pos);
 __device__ float MipTrDynamic(int mip, float3 pos);
+__device__ float MipVarianceDynamic(int mip, float3 pos);
 
 //#define MipDensity MipDensityStatic
 #define MipDensity MipDensityDynamic
 #define MipTr MipTrDynamic
+#define MipVariance MipVarianceDynamic
 
 
 __device__ float3 ShadowTerm_TRTex(float3 ori, float3 lightDir, float3 dir, float3 lightColor, float g, int mip);

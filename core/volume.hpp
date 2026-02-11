@@ -57,6 +57,9 @@ class VolumeRender {
 	float* mips[9];
 	float* tr_mips[8];
 	float* tr_mips2[8];
+	
+	// [新增] 方差 Mipmap
+	float* var_mips[9];
 
 	float hdri_exp = 1;
 
@@ -67,6 +70,9 @@ class VolumeRender {
 	cudaExtent size;
 
 	cudaArray* mips_dev[9];
+	// [新增] 方差 Mipmap 设备数组
+	cudaArray* var_mips_dev[9];
+
 	cudaExtent mip_size[9];
 
 	cudaArray* tr_mips_dev[8];
@@ -96,6 +102,9 @@ public:
 
 	void Update();
 	void Update_TR(float3 lightDir,float alpha = 64.0f, bool CPU = false);
+	
+	// [新增] 生成方差 Mipmaps（在 Update 中调用）
+	void GenerateVarianceMipmaps();
 
 	void SetHDRI(string path);
 

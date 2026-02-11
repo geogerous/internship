@@ -311,9 +311,10 @@ __device__ float3 RadiancePredict(curandState* seed, bool active, float3 pos, fl
     const int POOL = 36;
     const int P_DI = 24;
 
-    float X_Val[PC];
-    float X_Val_Sub[PC];
-    float X_Val_Hg[PC];
+    float X_Val[PC];      // Density feature
+    float X_Val_Sub[PC];  // Transmittance feature
+    float X_Val_Hg[PC];   // Phase function feature
+    float X_Val_Var[PC];  // Variance/Non-uniformity feature
     int randIndex = 0;
 
     if (active) {
@@ -332,17 +333,25 @@ __device__ float3 RadiancePredict(curandState* seed, bool active, float3 pos, fl
             {
                 CurrentOffsetPos = pos + LightDir * CurrentOffsetInfo.Offset;
             }
+
+            // mean density feature (unchanged)
             X_Val[i] = log(1.0f + alpha * MipDensityDynamic(int(CurrentOffsetInfo.Layer), CurrentOffsetPos) / 64.0f);
 
-            float3 MsDir;
+            // variance density feature (newly added)
+            {
+                float variance = MipVariance(int(CurrentOffsetInfo.Layer), CurrentOffsetPos);
+                X_Val_Var[i] = log(1.0f + variance);
+            }
+
+            // hg feature (unchanged)
             if (CurrentOffsetInfo.localindex == 0)
             {
-                MsDir = XMain;
+                float3 MsDir = XMain;
                 X_Val_Hg[i] = log(HenyeyGreenstein(dot(MsDir, LightDir), g) + 1.0f);
             }
             else
             {
-                MsDir = normalize(CurrentOffsetPos - pos);
+                float3 MsDir = normalize(CurrentOffsetPos - pos);
                 float Radius = float(1 << int(CurrentOffsetInfo.Layer)) / 256.0f;
                 float Angle = atan(0.5f * Radius / CurrentOffsetInfo.Offset);
                 float cos = dot(XMain, MsDir);
@@ -354,8 +363,6 @@ __device__ float3 RadiancePredict(curandState* seed, bool active, float3 pos, fl
                 float HG1 = tex2D<float>(_HGLut, u2, v);
                 X_Val_Hg[i] = log(HG0 * HG1 + 1.0f);
             }
-            //X_Val_Sub[i] = TR_MipDensityDynamic(max(int(CurrentOffsetInfo.Layer) - 1, 0), CurrentOffsetPos);
-            X_Val_Sub[i] = ShadowTerm_TRTex(CurrentOffsetPos, LXMain, XMain, float3{ 1.0f,1.0f,1.0f }, g, max(int(CurrentOffsetInfo.Layer) - 1, 0)).x;
         }
     }
     else {
@@ -364,6 +371,7 @@ __device__ float3 RadiancePredict(curandState* seed, bool active, float3 pos, fl
             X_Val[i] = 0;
             X_Val_Hg[i] = 0;
             X_Val_Sub[i] = 0;
+            X_Val_Var[i] = 0;
         }
     }
 
