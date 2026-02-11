@@ -1247,32 +1247,36 @@ void VolumeRender::Update() {
     {
         res = 256 >> mip;
 
-        ParallelFill(mips[mip], res, [&](int x, int y, int z, float u, float v, float w) {
-            return Sample(source, source_res, float3{ u,v,w });
-            });
+        ParallelFill(mips[mip], var_mips[mip], res, [&](int x, int y, int z, float u, float v, float w) -> float2 {
+            float sum = 0.0f, sum_sq = 0.0f;
+            int count = 0;
 
-        if (mip == 0 && source != datas)
-            delete[] source;
-        source = mips[mip];
-        source_res = res;
+            for (int dx = 0; dx < 2; dx++) {
+                for (int dy = 0; dy < 2; dy++) {
+                    for (int dz = 0; dz < 2; dz++) {
+                        int sx = x * 2 + dx;
+                        int sy = y * 2 + dy;
+                        int sz = z * 2 + dz;
+                        if (sx < res && sy < res && sz < res) {
+                            float val = Sample(mips[mip], res, sx, sy, sz);
+                            sum += val;
+                            sum_sq += val * val;
+                            count++;
+                        }
+                    }
+                }
+            }
+
+            float mean = sum / count;
+            float variance = (sum_sq / count) - (mean * mean);
+            return make_float2(mean, max(0.0f, variance));
+        });
+
+        // Upload variance mipmap to GPU
         cudaMemcpy3DParms copyParams = { 0 };
-        copyParams.srcPtr = make_cudaPitchedPtr((void*)source, source_res * sizeof(float), source_res, source_res);
-        copyParams.dstArray = mips_dev[mip];
-        copyParams.extent = make_cudaExtent(source_res, source_res, source_res);
-        copyParams.kind = cudaMemcpyHostToDevice;
-        cudaMemcpy3D(&copyParams);
-
-        CheckError;
-    }
-
-    GenerateVarianceMipmaps();
-    
-    for (int mip = 0; mip < 9; mip++) {
-        int res_var = 256 >> mip;
-        cudaMemcpy3DParms copyParams = { 0 };
-        copyParams.srcPtr = make_cudaPitchedPtr((void*)var_mips[mip], res_var * sizeof(float), res_var, res_var);
+        copyParams.srcPtr = make_cudaPitchedPtr((void*)var_mips[mip], res * sizeof(float), res, res);
         copyParams.dstArray = var_mips_dev[mip];
-        copyParams.extent = make_cudaExtent(res_var, res_var, res_var);
+        copyParams.extent = make_cudaExtent(res, res, res);
         copyParams.kind = cudaMemcpyHostToDevice;
         cudaMemcpy3D(&copyParams);
         CheckError;
@@ -1520,6 +1524,51 @@ float VolumeRender::DensityAtUV(float mip, float3 uv) {
     int a = int(mip);
     float w = mip - a;
     return lerp(DensityAtUV(a, uv), DensityAtUV(a + 1, uv), w);
+}
+
+float VolumeRender::VarianceAtUV(int mip, float3 uv) {
+    if (mip < 0 || mip >= 9) return 0.0f;
+
+    int res = 256 >> mip;
+    float* var_data = var_mips[mip];
+
+    // Trilinear interpolation
+    float3 pos = uv * float(res);
+    int x0 = int(pos.x);
+    int y0 = int(pos.y);
+    int z0 = int(pos.z);
+    int x1 = min(x0 + 1, res - 1);
+    int y1 = min(y0 + 1, res - 1);
+    int z1 = min(z0 + 1, res - 1);
+
+    float fx = pos.x - x0;
+    float fy = pos.y - y0;
+    float fz = pos.z - z0;
+
+    auto get_var = [&](int x, int y, int z) -> float {
+        if (x < 0 || x >= res || y < 0 || y >= res || z < 0 || z >= res)
+            return 0.0f;
+        return var_data[(z * res + y) * res + x];
+    };
+
+    float c000 = get_var(x0, y0, z0);
+    float c001 = get_var(x0, y0, z1);
+    float c010 = get_var(x0, y1, z0);
+    float c011 = get_var(x0, y1, z1);
+    float c100 = get_var(x1, y0, z0);
+    float c101 = get_var(x1, y0, z1);
+    float c110 = get_var(x1, y1, z0);
+    float c111 = get_var(x1, y1, z1);
+
+    float c00 = c000 * (1 - fx) + c100 * fx;
+    float c01 = c001 * (1 - fx) + c101 * fx;
+    float c10 = c010 * (1 - fx) + c110 * fx;
+    float c11 = c011 * (1 - fx) + c111 * fx;
+
+    float c0 = c00 * (1 - fy) + c10 * fy;
+    float c1 = c01 * (1 - fy) + c11 * fy;
+
+    return c0 * (1 - fz) + c1 * fz;
 }
 
 //__global__ void A() {

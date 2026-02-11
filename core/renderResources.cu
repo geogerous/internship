@@ -16,6 +16,17 @@ texture<float, cudaTextureType3D, cudaReadModeElementType> _Mips6;
 texture<float, cudaTextureType3D, cudaReadModeElementType> _Mips7;
 texture<float, cudaTextureType3D, cudaReadModeElementType> _Mips8;
 
+// New: Variance mipmap texture definitions
+texture<float, cudaTextureType3D, cudaReadModeElementType> _Var_Mips0;
+texture<float, cudaTextureType3D, cudaReadModeElementType> _Var_Mips1;
+texture<float, cudaTextureType3D, cudaReadModeElementType> _Var_Mips2;
+texture<float, cudaTextureType3D, cudaReadModeElementType> _Var_Mips3;
+texture<float, cudaTextureType3D, cudaReadModeElementType> _Var_Mips4;
+texture<float, cudaTextureType3D, cudaReadModeElementType> _Var_Mips5;
+texture<float, cudaTextureType3D, cudaReadModeElementType> _Var_Mips6;
+texture<float, cudaTextureType3D, cudaReadModeElementType> _Var_Mips7;
+texture<float, cudaTextureType3D, cudaReadModeElementType> _Var_Mips8;
+
 texture<float, cudaTextureType3D, cudaReadModeElementType> _TR_Mips0;
 texture<float, cudaTextureType3D, cudaReadModeElementType> _TR_Mips1;
 texture<float, cudaTextureType3D, cudaReadModeElementType> _TR_Mips2;

@@ -16,6 +16,7 @@
 
 #include "vector.cuh"
 
+
 extern texture<float, cudaTextureType2D, cudaReadModeElementType> _HGLut;
 
 
@@ -31,6 +32,19 @@ extern texture<float, cudaTextureType3D, cudaReadModeElementType> _Mips5;
 extern texture<float, cudaTextureType3D, cudaReadModeElementType> _Mips6;
 extern texture<float, cudaTextureType3D, cudaReadModeElementType> _Mips7;
 extern texture<float, cudaTextureType3D, cudaReadModeElementType> _Mips8;
+
+// New: Variance mipmap textures
+#define Var_Mip(i) _Var_Mips##i
+extern texture<float, cudaTextureType3D, cudaReadModeElementType> _Var_Mips0;
+extern texture<float, cudaTextureType3D, cudaReadModeElementType> _Var_Mips1;
+extern texture<float, cudaTextureType3D, cudaReadModeElementType> _Var_Mips2;
+extern texture<float, cudaTextureType3D, cudaReadModeElementType> _Var_Mips3;
+extern texture<float, cudaTextureType3D, cudaReadModeElementType> _Var_Mips4;
+extern texture<float, cudaTextureType3D, cudaReadModeElementType> _Var_Mips5;
+extern texture<float, cudaTextureType3D, cudaReadModeElementType> _Var_Mips6;
+extern texture<float, cudaTextureType3D, cudaReadModeElementType> _Var_Mips7;
+extern texture<float, cudaTextureType3D, cudaReadModeElementType> _Var_Mips8;
+
 #define TR_Mip(i) _TR_Mips##i
 extern texture<float, cudaTextureType3D, cudaReadModeElementType> _TR_Mips0;
 extern texture<float, cudaTextureType3D, cudaReadModeElementType> _TR_Mips1;
@@ -48,6 +62,9 @@ extern texture<float4, cudaTextureType2D> _HDRI;
 
 __device__ float MipDensityDynamic(int mip, float3 pos);
 __device__ float MipTrDynamic(int mip, float3 pos);
+
+// New: Variance sampling function declaration
+__device__ float MipVarianceDynamic(int mip, float3 pos);
 
 //#define MipDensity MipDensityStatic
 #define MipDensity MipDensityDynamic

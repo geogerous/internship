@@ -44,7 +44,7 @@ float CompareBias(string path, string name, string path2, string name2) {
     float bias = atof(buffer);
     return bias;
 #else
-    reutrn 0;
+    return 0;
 #endif
 }
 

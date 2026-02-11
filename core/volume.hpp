@@ -139,4 +139,7 @@ public:
 
 	vector<float3> Render(int2 size, float3 ori, float3 up, float3 right, float3 lightDir, RenderType rt = RenderType::PT, float g = 0.857, float alpha = 1, float3 lightColor = { 1, 1, 1 }, int multiScatter = 512, int sampleNum = 1024);
 	void Render(float3* taeget, Histogram* histo_buffer, unsigned int* target2, int2 size, float3 ori, float3 up, float3 right, float3 lightDir, float3 lightColor = { 1,1,1 }, float alpha = 1, int multiScatter = 1, float g = 0, int randseed = 0, RenderType rt = RenderType::PT, int toneType = 2, bool denoise = false);
+	
+	// New: Variance sampling method
+	float VarianceAtUV(int mip, float3 uv);
 };

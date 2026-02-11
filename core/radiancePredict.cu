@@ -247,13 +247,13 @@ __device__ inline void Rep(float* A, const float* B, const int Size, const int A
     LinearSm_Unbias(AvgWeight, AvgWeightPool, 8, 3, 0, 0, SEW1);\
     Rep(X_ValA, X_Val, SIZEX, TO, FROM);\
     MUL(X_ValA, SIZEX, TO, AvgWeightPool[0]);\
-    LinearReLU_SFL<SIZEX>(X_ValA, X_ValA2, WW##W##, WW##B##,TO,TO);\
+    LinearReLU_SFL<SIZEX>(X_ValA, X_ValA2, WW##W, WW##B,TO,TO);\
     Rep(X_ValB, X_Val_Sub, SIZEX, TO, FROM);\
     MUL(X_ValB, SIZEX, TO, AvgWeightPool[1]);\
-    LinearReLU_SFL<SIZEX>(X_ValB, X_ValB2, TRW##W##, TRW##B##,TO,TO);\
+    LinearReLU_SFL<SIZEX>(X_ValB, X_ValB2, TRW##W, TRW##B,TO,TO);\
     Rep(X_ValC, X_Val_Hg, SIZEX, TO, FROM);\
     MUL(X_ValC, SIZEX, TO, AvgWeightPool[2]);\
-    LinearReLU_SFL<SIZEX>(X_ValC, X_ValC2, HGW##W##, HGW##B##,TO,TO);\
+    LinearReLU_SFL<SIZEX>(X_ValC, X_ValC2, HGW##W, HGW##B,TO,TO);\
     }\
 
 #define SERES(LAST,FROM,TO,SIZEX,PID,SEW0,SEW1,WW,TRW,HGW) {\
@@ -267,15 +267,15 @@ __device__ inline void Rep(float* A, const float* B, const int Size, const int A
     Rep(X_ValA, X_Val, SIZEX, TO, FROM);\
     MUL(X_ValA, SIZEX, TO, AvgWeightPool[0]);\
     Add(X_ValA, X_ValA2, SIZEX, TO, LAST);\
-    LinearReLU_SFL<SIZEX>(X_ValA, X_ValA2, WW##W##, WW##B##,TO,TO);\
+    LinearReLU_SFL<SIZEX>(X_ValA, X_ValA2, WW##W, WW##B,TO,TO);\
     Rep(X_ValB, X_Val_Sub, SIZEX, TO, FROM);\
     MUL(X_ValB, SIZEX, TO, AvgWeightPool[1]);\
     Add(X_ValB, X_ValB2, SIZEX, TO, LAST);\
-    LinearReLU_SFL<SIZEX>(X_ValB, X_ValB2, TRW##W##, TRW##B##,TO,TO);\
+    LinearReLU_SFL<SIZEX>(X_ValB, X_ValB2, TRW##W, TRW##B,TO,TO);\
     Rep(X_ValC, X_Val_Hg, SIZEX, TO, FROM);\
     MUL(X_ValC, SIZEX, TO, AvgWeightPool[2]);\
     Add(X_ValC, X_ValC2, SIZEX, TO, LAST);\
-    LinearReLU_SFL<SIZEX>(X_ValC, X_ValC2, HGW##W##, HGW##B##,TO,TO);\
+    LinearReLU_SFL<SIZEX>(X_ValC, X_ValC2, HGW##W, HGW##B,TO,TO);\
     }\
 
 #define ADD3(FROM,TO,SIZEX){\
@@ -311,10 +311,9 @@ __device__ float3 RadiancePredict(curandState* seed, bool active, float3 pos, fl
     const int POOL = 36;
     const int P_DI = 24;
 
-    float X_Val[PC];      // Density feature
-    float X_Val_Sub[PC];  // Transmittance feature
-    float X_Val_Hg[PC];   // Phase function feature
-    float X_Val_Var[PC];  // Variance/Non-uniformity feature
+    float X_Val[PC];
+    float X_Val_Sub[PC];
+    float X_Val_Hg[PC];
     int randIndex = 0;
 
     if (active) {
@@ -333,25 +332,17 @@ __device__ float3 RadiancePredict(curandState* seed, bool active, float3 pos, fl
             {
                 CurrentOffsetPos = pos + LightDir * CurrentOffsetInfo.Offset;
             }
-
-            // mean density feature (unchanged)
             X_Val[i] = log(1.0f + alpha * MipDensityDynamic(int(CurrentOffsetInfo.Layer), CurrentOffsetPos) / 64.0f);
 
-            // variance density feature (newly added)
-            {
-                float variance = MipVariance(int(CurrentOffsetInfo.Layer), CurrentOffsetPos);
-                X_Val_Var[i] = log(1.0f + variance);
-            }
-
-            // hg feature (unchanged)
+            float3 MsDir;
             if (CurrentOffsetInfo.localindex == 0)
             {
-                float3 MsDir = XMain;
+                MsDir = XMain;
                 X_Val_Hg[i] = log(HenyeyGreenstein(dot(MsDir, LightDir), g) + 1.0f);
             }
             else
             {
-                float3 MsDir = normalize(CurrentOffsetPos - pos);
+                MsDir = normalize(CurrentOffsetPos - pos);
                 float Radius = float(1 << int(CurrentOffsetInfo.Layer)) / 256.0f;
                 float Angle = atan(0.5f * Radius / CurrentOffsetInfo.Offset);
                 float cos = dot(XMain, MsDir);
@@ -363,6 +354,8 @@ __device__ float3 RadiancePredict(curandState* seed, bool active, float3 pos, fl
                 float HG1 = tex2D<float>(_HGLut, u2, v);
                 X_Val_Hg[i] = log(HG0 * HG1 + 1.0f);
             }
+            //X_Val_Sub[i] = TR_MipDensityDynamic(max(int(CurrentOffsetInfo.Layer) - 1, 0), CurrentOffsetPos);
+            X_Val_Sub[i] = ShadowTerm_TRTex(CurrentOffsetPos, LXMain, XMain, float3{ 1.0f,1.0f,1.0f }, g, max(int(CurrentOffsetInfo.Layer) - 1, 0)).x;
         }
     }
     else {
@@ -371,7 +364,6 @@ __device__ float3 RadiancePredict(curandState* seed, bool active, float3 pos, fl
             X_Val[i] = 0;
             X_Val_Hg[i] = 0;
             X_Val_Sub[i] = 0;
-            X_Val_Var[i] = 0;
         }
     }
 
@@ -444,7 +436,7 @@ __device__ float3 RadiancePredict(curandState* seed, bool active, float3 pos, fl
     LinearReLU_SFL<8>(X_ValB2, Comb, LD_Tr41W, LD_Tr41B, 24, 104);
     LinearReLU_SFL<8>(X_ValC2, Comb, LD_Hg41W, LD_Hg41B, 24, 112);
     //
-#define SC(p,P) { AvgPool[POOL + POOL + 2] = scbase##p##[0];\
+#define SC(p,P) { AvgPool[POOL + POOL + 2] = scbase##p[0];\
     Rep(X_ValA, Comb, 120, 0, 0);\
     LinearReLU(AvgPool, X_ValA, 3, 8, POOL + POOL, 120, LGGSW, LGGSB);\
     LinearReLU_Unbias(AvgPool, AvgWeight, 75, 16, 0, 0, LSEFin1W);\
