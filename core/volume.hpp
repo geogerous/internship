@@ -43,7 +43,7 @@ public:
 };
 
 class VolumeRender {
-	int resolution;
+	
 	float* datas;
 	float* hglut;
 	
@@ -84,6 +84,7 @@ class VolumeRender {
 	void MallocMemory();
 
 public:
+    int resolution;
 	enum RenderType {
 		PT, RPNN, MRPNN
 	};

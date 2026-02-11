@@ -206,7 +206,7 @@ void GetDesiredCountSample(VolumeRender& CurrentVolume, vector<SamplePoint>& Sam
             printf("Getting Samples: %.5f%%\n", float(Samples.size()) / Count * 100.0f);
             last_print = Samples.size() / print_per;
         }
-        float3 ori = hash31sphere() * 3.0f;
+        float3 ori = hash31sphere() * 0.5f;
         float3 dir = normalize(hash31sphere() + normalize(-ori));
         float3 ldir = hash31sphere();
         float Alpha = lerp(density_min, density_max, hash1());
@@ -239,7 +239,7 @@ int main() {
     std::string DataName = "DS_10000.csv";
     std::string RelativePath = "./Data/";
     vector<std::string> DataList;
-    DataList.push_back("CLOUD0.bin");
+    DataList.push_back("cloud_0");
     // DataList.push_back("mediocris_high.512.txt");
     // DataList.push_back("cumulus_humilis.512.txt");
     // DataList.push_back("cumulus_congestus1.512.txt");
@@ -253,7 +253,7 @@ int main() {
     DensityMax.push_back(12.0f);
     DensityMax.push_back(40.0f);
     DensityMax.push_back(6.0f);
-    const int CountAll = 10000;
+    const int CountAll = 10;
     const int MiniLoopCount = 1;
     int Computed = 0;
     int CountPer = CountAll / DataList.size() / MiniLoopCount;
@@ -271,6 +271,15 @@ int main() {
             float CurrentDensityMin = DensityMin[i];
             float CurrentDensityMax = DensityMax[i];
             VolumeRender v(RelativePath + CurrentData);
+
+            printf(">>> [Debug] Model: %s\n", DataList[i].c_str());
+            printf(">>> [Debug] Resolution: %d\n", v.resolution);
+            printf(">>> [Debug] Max Density: %.6f\n", v.max_density);
+            if (v.max_density <= 0.000001f) {
+                printf("!!! ERROR: Max density is zero or near zero. Woodcock sampling will fail!\n");
+                // 可以尝试打印前几个数据点，看看是不是读到的全是 0
+                // printf("First voxel value: %.6f\n", v.datas[0]); 
+            }
             printf("Getting Mean Free Path Samples\n");
             vector<SamplePoint> Samples;
             GetDesiredCountSample(v, Samples, CountPer, CurrentDensityMin, CurrentDensityMax);
@@ -330,6 +339,8 @@ int main() {
     {
         printf("Generating Perlin Noise Volume...\n");
         VolumeRender v_noise(256);
+
+
         v_noise.SetDatas([&](int x, int y, int z, float u, float v, float w) {
             float freq1 = 8.0f, amp1 = 1.0f;
             float freq2 = 32.0f, amp2 = 0.25f;

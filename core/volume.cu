@@ -1230,49 +1230,53 @@ void VolumeRender::Update() {
 
     float* source = datas;
     int source_res = resolution;
-    for (;res > 256; res >>= 1)
+    for (; res > 256; res >>= 1)
     {
         float* temp = new float[res * res * res];
 
-        ParallelFill(temp, res, [&](int x, int y, int z, float u, float v, float w) {
-            return Sample(source, source_res, float3{ u,v,w });
-        });
+        // Only downsample density here – no variance, no mip index
+        ParallelFill(temp, res,
+            [&](int x, int y, int z, float u, float v, float w) {
+                return Sample(source, source_res, float3{ u, v, w });
+            });
 
         if (source != datas)
             delete[] source;
         source = temp;
         source_res = res;
     }
+
     for (int mip = 0; mip < 9; mip++)
     {
         res = 256 >> mip;
 
-        ParallelFill(mips[mip], var_mips[mip], res, [&](int x, int y, int z, float u, float v, float w) -> float2 {
-            float sum = 0.0f, sum_sq = 0.0f;
-            int count = 0;
+        // Correct double-output ParallelFill: density + variance
+        ParallelFill(mips[mip], var_mips[mip], res,
+            [&](int x, int y, int z, float u, float v, float w) -> float2 {
+                float sum = 0.0f, sum_sq = 0.0f;
+                int count = 0;
 
-            for (int dx = 0; dx < 2; dx++) {
-                for (int dy = 0; dy < 2; dy++) {
-                    for (int dz = 0; dz < 2; dz++) {
-                        int sx = x * 2 + dx;
-                        int sy = y * 2 + dy;
-                        int sz = z * 2 + dz;
-                        if (sx < res && sy < res && sz < res) {
-                            float val = Sample(mips[mip], res, sx, sy, sz);
-                            sum += val;
-                            sum_sq += val * val;
-                            count++;
+                for (int dx = 0; dx < 2; dx++) {
+                    for (int dy = 0; dy < 2; dy++) {
+                        for (int dz = 0; dz < 2; dz++) {
+                            int sx = x * 2 + dx;
+                            int sy = y * 2 + dy;
+                            int sz = z * 2 + dz;
+                            if (sx < res && sy < res && sz < res) {
+                                float val = Sample(mips[mip], res, sx, sy, sz);
+                                sum += val;
+                                sum_sq += val * val;
+                                count++;
+                            }
                         }
                     }
                 }
-            }
 
-            float mean = sum / count;
-            float variance = (sum_sq / count) - (mean * mean);
-            return make_float2(mean, max(0.0f, variance));
-        });
+                float mean = sum / count;
+                float variance = (sum_sq / count) - (mean * mean);
+                return make_float2(mean, max(0.0f, variance));
+            });
 
-        // Upload variance mipmap to GPU
         cudaMemcpy3DParms copyParams = { 0 };
         copyParams.srcPtr = make_cudaPitchedPtr((void*)var_mips[mip], res * sizeof(float), res, res);
         copyParams.dstArray = var_mips_dev[mip];
