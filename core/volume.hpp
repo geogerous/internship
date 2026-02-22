@@ -80,6 +80,18 @@ class VolumeRender {
 
 	cudaArray* env_tex_dev = 0;
 
+    // [New] Texture Objects
+    cudaTextureObject_t mips_tex[9] = {0};
+    cudaTextureObject_t var_mips_tex[9] = {0};
+    cudaTextureObject_t tr_mips_tex[8] = {0};
+    cudaTextureObject_t density_tex = 0;
+    cudaTextureObject_t hdri_tex = 0;
+    cudaTextureObject_t hglut_tex = 0;
+
+    // [New] Surface Objects (for writing)
+    cudaSurfaceObject_t hglut_surf = 0;
+    cudaSurfaceObject_t tr_mips_surf[8] = {0};
+
 	VolumeRender(const VolumeRender& obj) = delete;
 	void MallocMemory();
 

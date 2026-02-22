@@ -19,54 +19,22 @@ __device__ float IOR = -1;
 typedef float3(*SkyBoxFunc)(float3);
 typedef float(*DensityFunc)(float3);
 
-// [新增] 方差纹理宏定义（类似 Mip 宏）
-#define VarMip(i) _VarDensityMip##i
-
-// [新增] 声明方差 Mipmap 纹理
-texture<float, cudaTextureType3D, cudaReadModeElementType>  VarMip(0);
-texture<float, cudaTextureType3D, cudaReadModeElementType>  VarMip(1);
-texture<float, cudaTextureType3D, cudaReadModeElementType>  VarMip(2);
-texture<float, cudaTextureType3D, cudaReadModeElementType>  VarMip(3);
-texture<float, cudaTextureType3D, cudaReadModeElementType>  VarMip(4);
-texture<float, cudaTextureType3D, cudaReadModeElementType>  VarMip(5);
-texture<float, cudaTextureType3D, cudaReadModeElementType>  VarMip(6);
-texture<float, cudaTextureType3D, cudaReadModeElementType>  VarMip(7);
-texture<float, cudaTextureType3D, cudaReadModeElementType>  VarMip(8);
-
-// [新增] 方差采样函数
+// [Updated] Variance sampling using texture objects array
 __device__ inline float VarMipDensityDynamic(int mip, float3 pos) {
     if (mip < 0) mip = 0;
     if (mip > 8) mip = 8;
     
-    float3 uv = pos + 0.5;
-    
-    switch (mip) {
-        case 0: return tex3D<float>(VarMip(0), uv.z, uv.y, uv.x);
-        case 1: return tex3D<float>(VarMip(1), uv.z, uv.y, uv.x);
-        case 2: return tex3D<float>(VarMip(2), uv.z, uv.y, uv.x);
-        case 3: return tex3D<float>(VarMip(3), uv.z, uv.y, uv.x);
-        case 4: return tex3D<float>(VarMip(4), uv.z, uv.y, uv.x);
-        case 5: return tex3D<float>(VarMip(5), uv.z, uv.y, uv.x);
-        case 6: return tex3D<float>(VarMip(6), uv.z, uv.y, uv.x);
-        case 7: return tex3D<float>(VarMip(7), uv.z, uv.y, uv.x);
-        case 8: return tex3D<float>(VarMip(8), uv.z, uv.y, uv.x);
-        default: return 0.0f;
-    }
+    float3 uv = pos + 0.5f;
+    return tex3D<float>(_Var_Mips[mip], uv.z, uv.y, uv.x);
 }
 
 __device__ float3 SkyBox(float3 dir) {
     float4 pix = tex2D<float4>(_HDRI, atan2f(-dir.z, dir.x) * (float)(0.5 / 3.1415926) + 0.5f, acosf(fmaxf(fminf(dir.y, 1.0f), -1.0f)) * (float)(1.0 / 3.1415926));
     return float3{ pix.x, pix.y, pix.z } *enviroment_exp;
-    //return { 0,0,0 };
-    float3 sky = { lerp(0.3, 0.2647059, dir.z * 0.5 + 0.5), lerp(0.5450981, 0.7, dir.x * -0.5 + 0.5), 1 };
-    float3 ground = { 4, 1.5, 0 };
-    float horiz = -0.6f;
-    return (dir.y > horiz ? sky * (1 + (dir.y - horiz)) : lerp(sky, ground, pow(-(dir.y - horiz), 0.4f))) * 0.6f;
 }
 
 __device__ float Density(float3 pos) {
-    //return 1;
-    float3 uv = pos + 0.5;
+    float3 uv = pos + 0.5f;
     return tex3D<float>(_DensityVolume, uv.z, uv.y, uv.x);
 }
 
@@ -213,19 +181,10 @@ __device__ float4 CalculateRadiance(float3 ori, float3 dir, float3 lightDir, flo
     float3 res = { 0, 0, 0 };
     for (int i = 0; i < sampleNum; i++)
     {
-        //{
-        //    float3 samplePosition = ori + dir * dis;
-        //    float3 rayDirection = dir;
-        //    float3 nextPos, nextDir;
-        //    float dis = RayBoxDistance(samplePosition, rayDirection);
-        //    float t = Tr(&seed, samplePosition, rayDirection, dis, alpha);
-        //    res = res + float3{ t,t,t };
-        //}
         float3 samplePosition = ori + dir * dis;
         float3 rayDirection = dir;
         float3 current_scatter_rate = { 1,1,1 };
 
-        //float path_phase = 1.0;
         for (int scatter_num = 0; scatter_num < multiScatter; scatter_num++)
         {
             float3 nextPos, nextDir;
@@ -270,7 +229,7 @@ __device__ float3 ShadowTerm(float3 ori, float3 lightDir, float3 dir, float3 lig
         float lsample = MipDensityStatic(0, Lpos);
         shadowdist = shadowdist + lsample;
     }
-    float3 shadowterm = lightColor * exp(-shadowdist * alpha * MaxStepInv) * phase;// ;
+    float3 shadowterm = lightColor * exp(-shadowdist * alpha * MaxStepInv) * phase;
     return shadowterm;
 }
 __device__ float3 GetSample(float3 ori, float3 dir, float3 lightDir, float3 lightColor = { 1, 1, 1 }, float scatter = 1.0f, float alpha = 1, int multiScatter = 1, float g = 0, int sampleNum = 1) {
@@ -390,8 +349,7 @@ __device__ float GGXTerm(const float NdotH, const float roughness)
 {
     float a2 = roughness * roughness;
     float d = (NdotH * a2 - NdotH) * NdotH + 1.0f; // 2 mad
-    return 0.318309886183790671538 * a2 / (d * d + 1e-7f); // This function is not intended to be running on Mobile,
-                                          // therefore epsilon is smaller than what can be represented by float
+    return 0.318309886183790671538 * a2 / (d * d + 1e-7f);
 }
 __device__ float Pow5(float x)
 {
@@ -404,7 +362,7 @@ __device__ float SmithJointGGXVisibilityTerm(const float NdotL, const float Ndot
 }
 __device__ float3 FresnelTerm(const float3 F0, const float cosA)
 {
-    float t = Pow5(1 - cosA);   // ala Schlick interpoliation
+    float t = Pow5(1 - cosA);
     return F0 + (float3{ 1,1,1} -F0) * t;
 }
 __device__ float PhysicsFresnel(float IOR, float3 i, float3 n) {
@@ -433,13 +391,13 @@ __device__ float4 BRDF(float3 normal, const float3 viewDir, const float3 lightDi
     float shiftAmount = dot(normal, viewDir);
     normal = shiftAmount < 0.0f ? normal + viewDir * (-shiftAmount + 1e-5f) : normal;
 
-    float nv = saturate(dot(normal, viewDir));
+    float nv = __saturatef(dot(normal, viewDir));
 
-    float nl = saturate(dot(normal, lightDir));
-    float nh = saturate(dot(normal, floatDir));
+    float nl = __saturatef(dot(normal, lightDir));
+    float nh = __saturatef(dot(normal, floatDir));
 
-    float lv = saturate(dot(lightDir, viewDir));
-    float lh = saturate(dot(lightDir, floatDir));
+    float lv = __saturatef(dot(lightDir, viewDir));
+    float lh = __saturatef(dot(lightDir, floatDir));
 
     float roughness = 0.008;
 
@@ -510,14 +468,6 @@ __device__ float4 NNPredict(float3 ori, float3 dir, float3 lightDir, float3 ligh
             float tr = (Tr(&seed, pos, sb.Light.x, dis, alpha) * phase);
             predict = predict + tr;
         }
-
-        /*
-        {   // target function
-            if (active > 0) {
-                predict = GetSample(make_float3(spoint), dir, lightDir, lightColor, scatter_rate.x / 1.001, alpha, 512, g, 1);
-            }
-        }
-        */
 
         return make_float4(active > 0 ? predict * lightColor * scatter_rate : SkyBox(dir), active > 0 ? distance(ori, pos) : -1);
     }
